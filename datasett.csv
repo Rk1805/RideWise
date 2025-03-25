@@ -1,0 +1,16 @@
+Serial No.,News,Author,True/False,Sentiment
+1,"Government plans to ban all social media apps in India","Ravish Kumar (NDTV)",False,Political News
+2,"India and China reach new trade agreements","Barkha Dutt (NDTV)",True,International News
+3,"New evidence suggests the world is flat, scientists baffled","Rajdeep Sardesai (CNN)",False,International News
+4,"India introduces new education reforms to improve learning","Arnab Goswami (Times Now)",True,Regional News
+5,"India’s richest man pledges to donate billions to charity","Anjana Om Kashyap (AAJ Tak)",True,Regional News
+6,"Scientists discover cure for cancer in India","Ravish Kumar (NDTV)",False,Regional News
+7,"Mumbai to experience heavy rainfall this week","Sudhir Chaudhary (Zee News)",True,Regional News
+8,"Government to provide free internet to all citizens in India","Sandeep Chaudhary (News 18)",False,Political News
+9,"Prime Minister Modi announces new farm bill in Parliament","Arnab Goswami (Times Now)",True,Political News
+10,"NASA reveals India will be the first to colonize Mars","Rajdeep Sardesai (CNN)",False,International News
+11,"India celebrates Diwali with grand firework displays","Anjana Om Kashyap (AAJ Tak)",True,Religious News
+12,"The Indian economy is booming, experts say","Sudhir Chaudhary (Zee News)",True,Political News
+13,"New app lets Indians order food directly from local restaurants","Ravish Kumar (NDTV)",True,Regional News
+14,"India will cut ties with neighboring countries due to trade issues","Barkha Dutt (NDTV)",False,Political News
+15,"Yoga has become a global health trend, says Indian expert","Sandeep Chaudhary (News 18)",True,International News
