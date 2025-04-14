@@ -140,12 +140,6 @@ const App = () => {
           <Stack.Screen name="LandingPage" component={LandingPage} options={{ headerShown: false }} />
           <Stack.Screen name="Login" component={Login} options={{ headerShown: false }} />
           <Stack.Screen name="DriverLogin" component={DriverLogin} options={{ headerShown: false }} />
-          <Stack.Screen name="Dashboard" component={Dashboard} options={{ headerShown: true }} />
-          <Stack.Screen name="DriverDashboard" component={DriverDashboard} options={{ headerShown: true, title: 'Driver Dashboard' }} />
-          <Stack.Screen name="RideBooking" component={RideBooking} options={{ headerShown: true }} />
-          <Stack.Screen name="LocationPicker" component={LocationPicker} options={{ headerShown: true }} />
-          <Stack.Screen name="CarpoolScreen" component={CarpoolScreen} />
-          <Stack.Screen name="Settings" component={Settings} />
           <Stack.Screen name="GroupDetails" component={GroupDetails} />
           <Stack.Screen name="UsernameScreen" component={UsernameScreen} />
           <Stack.Screen name="OfferRide" component={OfferRideScreen} />
@@ -166,6 +160,13 @@ const App = () => {
           <Stack.Screen name="Profile" component={Profile} />
           <Stack.Screen name="GroupScreen" component={GroupScreen} options={{ title: 'Groups' }} />
           <Stack.Screen name="MembersScreen" component={MembersScreen} options={{ title: 'Members' }} />
+          <Stack.Screen name="Dashboard" component={Dashboard} options={{ headerShown: true }} />
+          <Stack.Screen name="DriverDashboard" component={DriverDashboard} options={{ headerShown: true, title: 'Driver Dashboard' }} />
+          <Stack.Screen name="RideBooking" component={RideBooking} options={{ headerShown: true }} />
+          <Stack.Screen name="LocationPicker" component={LocationPicker} options={{ headerShown: true }} />
+          <Stack.Screen name="CarpoolScreen" component={CarpoolScreen} />
+          <Stack.Screen name="Settings" component={Settings} />
+          
         </Stack.Navigator>
       </NavigationContainer>
     </ThemeProvider>
