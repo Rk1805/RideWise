@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Alert, TextInput, Modal, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform } from 'react-native';
+import { View, Text, Alert, TextInput, Modal, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform ,Button} from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import * as Location from 'expo-location';
@@ -23,6 +23,7 @@ const DriverRouteScreen = () => {
 
   const [currentStep, setCurrentStep] = useState<'pickup' | 'drop'>('pickup');
   const [otp, setOtp] = useState('');
+  const [otpVerified, setOtpVerified] = useState(false);
   const [expectedOtp, setExpectedOtp] = useState('');
   const [otpModalVisible, setOtpModalVisible] = useState(false);
   const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -121,6 +122,7 @@ const DriverRouteScreen = () => {
   const handleOtpSubmit = async () => {
     if (otp.trim() === expectedOtp.toString()) {
       try {
+        setOtpVerified(true);
         const db = getDatabase();
         const rideRef = dbRef(db, `rideRequests/${realtimeId}`);
   
@@ -197,6 +199,42 @@ const DriverRouteScreen = () => {
     }
   };
 
+  const handleCancelRide = async () => {
+    Alert.alert(
+      "Cancel Ride",
+      "Are you sure you want to cancel this ride? It will be made available for other drivers.",
+      [
+        {
+          text: "No",
+          style: "cancel",
+        },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: async () => {
+            try {
+                const db = getDatabase();
+                const rideRef = dbRef(db, `rideRequests/${realtimeId}`);
+  
+              await update(rideRef, {
+                driverAccepted: false,
+                status: "requested", // Optional: mark ride as still available
+              });
+  
+              // Optionally remove from Realtime DB if you store active drivers
+  
+              Alert.alert("Ride Cancelled");
+              navigation.goBack(); // or navigate to RideRequests again
+            } catch (error) {
+              console.error("Error cancelling ride:", error);
+              Alert.alert("Error", "Something went wrong while cancelling the ride.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <MapView
@@ -245,6 +283,14 @@ const DriverRouteScreen = () => {
         </View>
         
       )}
+
+        {!otpVerified && (
+        <Button
+            title="Cancel Ride"
+            onPress={handleCancelRide}
+            color="red"
+        />
+        )}
 
       {/* OTP Modal */}
       <Modal visible={otpModalVisible} animationType="slide" transparent>

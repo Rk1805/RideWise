@@ -48,7 +48,7 @@ const Login = () => {
     }
   };
 
-  const userVerification = async (rep) => {
+  const userVerification = async (rep,uid:string) => {
     await sendEmailVerification(rep);
     alert('Verification email sent! Please check your inbox.');
 
@@ -70,7 +70,12 @@ const Login = () => {
         navigation.dispatch(
           CommonActions.reset({
             index: 0,
-            routes: [{ name: 'Dashboard' }],
+            routes: [
+              {
+                name: 'UsernameScreen',
+                params: { uid: rep.uid },
+              },
+            ],
           })
         );
         return;
@@ -128,7 +133,7 @@ const Login = () => {
         if (rep) {
           console.log("New User Created:", rep);
           showToast('Account created successfully!');
-          userVerification(rep);
+          userVerification(rep,rep.uid);
 
         } else {
           showToast('Signup Failed: Something went wrong!');

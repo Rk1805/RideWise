@@ -275,6 +275,7 @@ const RideRequests = () => {
           licensePlate: vehicleInfo.licensePlate,
           year: vehicleInfo.year,
         },
+        driverAccepted: true,
       });
   
       setRideRequests(prev => prev.filter(ride => ride.id !== rideId));

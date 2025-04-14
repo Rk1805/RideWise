@@ -260,6 +260,7 @@ const RideBooking = () => {
       distance: dist,
       duration: duration,
       amount : Number(amt),
+      driverAccepted: false,
     };
   
     await set(newRequestRef, payload);

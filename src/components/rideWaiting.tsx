@@ -118,6 +118,12 @@ const RideWaiting: React.FC<Props> = ({ route }) => {
           if (rideData?.vehicleInfo) {
             setVehicleInfo(rideData.vehicleInfo);
           }
+          if(rideData?.driverAccepted){
+            setRideStatus('active');
+          }
+          if(!rideData.driverAccepted){
+            setRideStatus('requested');
+          }
         }
       }
       if (rideData?.isRideCompleted && !rideData?.isUserConfirmed) {
@@ -225,7 +231,7 @@ const RideWaiting: React.FC<Props> = ({ route }) => {
             <Text style={[styles.waitingText, { color: '#FFA72F', marginTop: 5 }]}>
               {driverDetails.driverName}
             </Text>
-            {otp && (
+            {otp && rideStatus=='active' && (
                 <View style={styles.card}>
                     <Text style={styles.cardTitle}>Driver Details</Text>
 
