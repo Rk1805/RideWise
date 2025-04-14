@@ -97,7 +97,7 @@ const MembersScreen = () => {
 
       const updatedGroupIds = [...(userData.groupIds || []), groupId];
       await updateDoc(doc(db, 'users', userId), {
-        groupIds: updatedGroupIds,
+        groupId: updatedGroupIds,
       });
 
       const groupRef = doc(db, 'groups', groupId);
