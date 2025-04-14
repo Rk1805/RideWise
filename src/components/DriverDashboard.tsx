@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Switch } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Switch,ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, getDoc, onSnapshot ,doc,getDocs,updateDoc} from 'firebase/firestore';
 import { auth, db } from '../service/firebase';
@@ -91,35 +91,34 @@ const DriverDashboard = () => {
 
   return (
     <DashboardTemplate>
-      <View style={styles.container}>
-        <View style={styles.welcomeSection}>
-          <Text style={styles.welcomeText}>Welcome, {driverName}</Text>
-          <View style={styles.toggleRow}>
-            <Text style={styles.statusText}>Status: {availability}</Text>
-            <Switch value={isSwitchOn} onValueChange={handleToggleAvailability} />
-          </View>
+    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <View style={styles.welcomeSection}>
+        <Text style={styles.welcomeText}>Welcome, {driverName}</Text>
+        <View style={styles.toggleRow}>
+          <Text style={styles.statusText}>Status: {availability}</Text>
+          <Switch value={isSwitchOn} onValueChange={handleToggleAvailability} />
         </View>
-
-        {cardData.map((card, index) => (
-          <TouchableOpacity
-            key={index}
-            style={styles.card}
-            onPress={() => navigation.navigate(card.route as never)}
-          >
-            <Image source={card.source} style={[{ marginBottom: 8 }, card.iconStyle]} />
-            <Text style={styles.cardTitle}>{card.title}</Text>
-            <Text style={styles.cardDescription}>{card.description}</Text>
-          </TouchableOpacity>
-        ))}
       </View>
-    </DashboardTemplate>
+
+      {cardData.map((card, index) => (
+        <TouchableOpacity
+          key={index}
+          style={styles.card}
+          onPress={() => navigation.navigate(card.route as never)}
+        >
+          <Image source={card.source} style={[{ marginBottom: 8 }, card.iconStyle]} />
+          <Text style={styles.cardTitle}>{card.title}</Text>
+          <Text style={styles.cardDescription}>{card.description}</Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  </DashboardTemplate>
   );
 };
 
 const getStyles = (isDarkMode: boolean) =>
   StyleSheet.create({
     container: {
-      flex: 1,
       paddingHorizontal: 16,
       paddingVertical: 20,
       backgroundColor: isDarkMode ? '#121212' : '#f9f9f9',

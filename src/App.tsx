@@ -31,6 +31,10 @@ import DriverUsername from './components/DriverUsername';
 import AnalyticsScreen from './components/AnalyticsScreen';
 import DriverVehicleDetailsScreen from './components/DriverVehicleDetailsScreen';
 import Profile from './components/Profile';
+import GroupScreen from './components/GroupScreen';
+import MembersScreen from './components/MembersScreen';
+import 'react-native-gesture-handler'; // 👈 very important
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export type RootStackParamList = {
   LandingPage: undefined;
@@ -76,6 +80,8 @@ export type RootStackParamList = {
   };
   AnalyticsScreen: undefined;
   DriverVehicleDetailsScreen: undefined;
+  GroupScreen:undefined;
+  MembersScreen:undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -126,6 +132,8 @@ const App = () => {
   const initialRoute = 'LandingPage';
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+
     <ThemeProvider>
       <NavigationContainer>
         <Stack.Navigator initialRouteName={initialRoute}>
@@ -156,9 +164,12 @@ const App = () => {
           <Stack.Screen name="AnalyticsScreen" component={AnalyticsScreen} options={{ title: 'Analytics' }} />
           <Stack.Screen name="DriverVehicleDetailsScreen" component={DriverVehicleDetailsScreen} options={{ title: 'My Vehicle Details' }} />
           <Stack.Screen name="Profile" component={Profile} />
+          <Stack.Screen name="GroupScreen" component={GroupScreen} options={{ title: 'Groups' }} />
+          <Stack.Screen name="MembersScreen" component={MembersScreen} options={{ title: 'Members' }} />
         </Stack.Navigator>
       </NavigationContainer>
     </ThemeProvider>
+    </GestureHandlerRootView>
   );
 };
 

@@ -51,7 +51,7 @@ const Dashboard = () => {
       title: 'Carpooling',
       description: 'Share rides and save costs.',
       icon: 'account-group',
-      route: 'CarpoolScreen',
+      route: 'GroupScreen',
       source: require('../assets/carpoolicon.png'),
       iconStyle: { width: 80, height: 60 }
     },
