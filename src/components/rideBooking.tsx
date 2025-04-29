@@ -8,6 +8,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { addDoc, collection } from 'firebase/firestore';
 import { getDatabase, ref, push, set } from "firebase/database";
 import { auth, db } from '../service/firebase'; // adjust path as needed
+import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_API_KEY } from '@env';
 
 // const [date, setDate] = useState(new Date());
 // const [showDatePicker, setShowDatePicker] = useState(false);
@@ -37,8 +38,6 @@ const RideBooking = () => {
   const [isSelectingEndSuggestion, setIsSelectingEndSuggestion] = useState(false);  
   const [requestId, setRequestId] = useState(""); // State to hold the request ID
 
-
-  const GOOGLE_MAPS_API_KEY = 'AIzaSyBGdExMD_KJEa-QVVZGM4bsLbVLfxFMGLA'; // Replace with your actual API key
 
 
   const getCurrentLocation = async () => {

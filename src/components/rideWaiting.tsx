@@ -11,6 +11,7 @@ import { AirbnbRating } from 'react-native-ratings';
 import Modal from 'react-native-modal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation,CommonActions } from '@react-navigation/native';
+import { GOOGLE_MAPS_API_KEY } from '@env';
 
 const { width, height } = Dimensions.get('window');
 
@@ -24,7 +25,6 @@ type Props = {
   };
 };
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyBGdExMD_KJEa-QVVZGM4bsLbVLfxFMGLA';
 
 const RideWaiting: React.FC<Props> = ({ route }) => {
   const navigation = useNavigation();

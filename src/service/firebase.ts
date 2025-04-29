@@ -2,15 +2,16 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import {API_KEY, AUTH_DOMAIN, PROJECT_ID, STORAGE_BUCKET, MESSAGING_SENDER_ID, APP_ID, DATABSE_URL} from "@env";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCxV8dzbxpRilGLTEJ4OKfdCVgrwgPQCjk",
-  authDomain: "ridewise-e2fb6.firebaseapp.com",
-  projectId: "ridewise-e2fb6",
-  storageBucket: "ridewise-e2fb6.appspot.com",
-  messagingSenderId: "47109715495",
-  appId: "1:47109715495:android:bf2f72d6e2d94fd6578002",
-  databaseURL: "https://ridewise-e2fb6-default-rtdb.asia-southeast1.firebasedatabase.app", // ✅ important
+  apiKey: API_KEY,
+  authDomain: AUTH_DOMAIN,
+  projectId: PROJECT_ID,
+  storageBucket: STORAGE_BUCKET,
+  messagingSenderId: MESSAGING_SENDER_ID,
+  appId: APP_ID,
+  databaseURL: DATABSE_URL, 
 };
 
 // Initialize Firebase only if not already initialized (prevents duplicate errors)
