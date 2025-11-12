@@ -14,8 +14,6 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!auth.currentUser) return;
-    
-    // Listen for rides that were recently accepted
           const q = query(
         collection(db, 'history'),
         where('userID', '==', auth.currentUser.uid),
@@ -26,7 +24,6 @@ const Dashboard = () => {
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added' || 
            (change.type === 'modified' && change.doc.data().status === 'accepted')) {
-          // Show notification for newly accepted ride
           const ride = change.doc.data();
           Alert.alert(
             'Ride Accepted!',
