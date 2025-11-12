@@ -105,13 +105,13 @@ const AnalyticsScreen = () => {
         {userType === 'driver' ? (
           <>
             <StatCard icon="currency-inr" label="Total Earnings"  value={`₹${(stats.totalEarnings ?? 0)}`} gradient={['#f59e0b', '#fbbf24']} />
-            <StatCard icon="map-marker-distance" label="Distance Travelled" value={`${stats.totalDistance.toFixed(2)} km`} gradient={['#3b82f6', '#60a5fa']} />
+            <StatCard icon="map-marker-distance" label="Distance Travelled" value={`${stats.totalDistance} km`} gradient={['#3b82f6', '#60a5fa']} />
             <StatCard icon="clock-outline" label="Time Spent" value={`${stats.totalTime.toFixed(1)} min`} gradient={['#8b5cf6', '#a78bfa']} />
           </>
         ) : ( 
           <>
             <StatCard icon="currency-inr" label="Total Spent"  value={`₹${(stats.totalCost ?? 0)}`} gradient={['#f59e0b', '#fbbf24']} />
-            <StatCard icon="map-marker-distance" label="Distance Travelled" value={`${stats.totalDistance.toFixed(2)} km`} gradient={['#3b82f6', '#60a5fa']} />
+            <StatCard icon="map-marker-distance" label="Distance Travelled" value={`${stats.totalDistance} km`} gradient={['#3b82f6', '#60a5fa']} />
             <StatCard icon="clock-outline" label="Time Spent" value={`${stats.totalTime.toFixed(1)} min`} gradient={['#8b5cf6', '#a78bfa']} />
           </>
         )}
