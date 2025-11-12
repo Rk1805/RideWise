@@ -321,6 +321,7 @@ const handleAuthAction = async () => {
 
 ---
 
+<<<<<<< HEAD
 ## 🗄️ Database Schema
 
 ### **Firestore Collections Structure**
@@ -682,3 +683,9 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 [![GitHub Issues](https://img.shields.io/github/issues/yourusername/RideWise)](https://github.com/yourusername/RideWise/issues)
 
 </div>
+=======
+## Support
+If you find this project useful, consider starring ⭐ the repo and sharing it with others.
+
+Good project
+>>>>>>> 192f5e3fe8d4e23f2451c65743abfc8c28af5ca9
