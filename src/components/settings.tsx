@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Switch, TouchableOpacity, StyleSheet , ScrollView,hr} from 'react-native';
+import { View, Text, Switch, TouchableOpacity, StyleSheet , ScrollView} from 'react-native';
 import { useTheme } from '../service/themeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';

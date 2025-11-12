@@ -3,15 +3,17 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvo
 import { CommonActions } from '@react-navigation/native';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../service/firebase';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useTheme } from '../service/themeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+
+type UsernameScreenRouteProp = RouteProp<{ UsernameScreen: { uid: string } }, 'UsernameScreen'>;
 
 const UsernameScreen = () => {
   const { isDarkMode } = useTheme();
   const [username, setUsername] = useState('');
   const navigation = useNavigation();
-  const route = useRoute();
+  const route = useRoute<UsernameScreenRouteProp>();
   const { uid } = route.params;
 
   const handleSaveUsername = async () => {
@@ -41,8 +43,8 @@ const UsernameScreen = () => {
   };
 
   const gradientColors = isDarkMode
-    ? ['#1a1c2e', '#111827']
-    : ['#4776E6', '#8E54E9'];
+    ? ['#1a1c2e', '#111827'] as const
+    : ['#4776E6', '#8E54E9'] as const;
 
   return (
     <KeyboardAvoidingView

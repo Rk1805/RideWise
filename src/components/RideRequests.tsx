@@ -4,50 +4,69 @@ import {
   Alert, ActivityIndicator 
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, writeBatch,getDoc } from 'firebase/firestore';
-import { getDatabase, ref, push, set ,get,update} from 'firebase/database';
-import { auth, db } from '../service/firebase';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, writeBatch, getDoc, onSnapshot } from 'firebase/firestore';
+import { ref, push, set ,get,update, onValue, off} from 'firebase/database';
+import { auth, db, realtimeDb } from '../service/firebase';
 import { useTheme } from '../service/themeContext';
 import * as Location from 'expo-location';
 import { navigate } from 'expo-router/build/global-state/routing';
-import { UserX } from 'lucide-react-native';
+import locationTrackingService from '../service/locationTrackingService';
+import RideMap from './RideMap';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const RideRequests = () => {
   const { isDarkMode } = useTheme();
   const navigation = useNavigation();
   
-  const [rideRequests, setRideRequests] = useState([]);
+  const [rideRequests, setRideRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [processingId, setProcessingId] = useState(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
   const [driverAvailable, setDriverAvailable] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'requested' | 'completed'>('all');
 
 
+  // ✅ Combined effect to handle driver status and ride requests
   useEffect(() => {
-    const checkDriverStatus = async () => {
-      const uid = await AsyncStorage.getItem('uid');
-      if (!uid) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
 
-      const driverDoc = await getDoc(doc(db, 'drivers', uid));
-      if (driverDoc.exists()) {
-        const data = driverDoc.data();
-        setDriverAvailable(data.status=== 'available'? true : false);
-        setIsVerified(data.isVerified);
-      } else {
-        setDriverAvailable(false);
+    const driverRef = doc(db, 'drivers', uid);
+    
+    const unsubscribe = onSnapshot(driverRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        const newStatus = data.status === 'available';
+        const newVerified = data.isVerified;
+        
+        console.log('Driver status updated:', { 
+          uid, 
+          status: data.status, 
+          isVerified: newVerified,
+          newStatus 
+        });
+        
+        setDriverAvailable(newStatus);
+        setIsVerified(newVerified);
+        
+        // ✅ Fetch ride requests immediately when driver becomes available
+        if (newStatus) {
+          console.log('Driver is available, fetching ride requests...');
+          fetchRideRequests();
+        } else {
+          console.log('Driver is not available, clearing ride requests');
+          setRideRequests([]);
+        }
       }
-    };
+    });
 
-    checkDriverStatus();
-  }, []);
+    return () => unsubscribe();
+  }, []); // ✅ Remove dependency on rideRequests.length
   
-  useEffect(() => {
-    fetchRideRequests();
-  }, []);
-  
-  const haversineDistance = (lat1, lon1, lat2, lon2) => {
-    const toRad = (val) => (val * Math.PI) / 180;
+  // ✅ Distance calculation function
+  const haversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const toRad = (val: number) => (val * Math.PI) / 180;
     const R = 6371; // Earth radius in km
   
     const dLat = toRad(lat2 - lat1);
@@ -64,7 +83,32 @@ const RideRequests = () => {
   const fetchRideRequests = async () => {
     try {
       setLoading(true);
-  
+      
+      // ✅ Double-check driver availability
+      const uid = auth.currentUser?.uid;
+      if (!uid) {
+        console.log('No authenticated user found');
+        setLoading(false);
+        return;
+      }
+
+      const driverDoc = await getDoc(doc(db, 'drivers', uid));
+      if (!driverDoc.exists()) {
+        console.log('No driver document found');
+        setLoading(false);
+        return;
+      }
+
+      const driverData = driverDoc.data();
+      if (driverData.status !== 'available') {
+        console.log('Driver not available, status:', driverData.status);
+        setRideRequests([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log('Driver is available, proceeding to fetch ride requests...');
+
       // Get driver's current location
       console.log('Requesting location permissions...');
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -80,15 +124,15 @@ const RideRequests = () => {
 
       console.log(`Driver's location: ${driverLat}, ${driverLon}`);
   
-      const db = getDatabase();
-      const snapshot = await get(ref(db, 'rideRequests'));
-      console.log(snapshot.val()); 
+      const snapshot = await get(ref(realtimeDb, 'rideRequests'));
+      console.log('All ride requests:', snapshot.val()); 
   
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const filtered = [];
+        const filtered: any[] = [];
   
-        Object.entries(data).forEach(([key, value]) => {
+        Object.entries(data).forEach(([key, value]: [string, any]) => {
+          // ✅ Only show requested rides (not completed ones)
           if (
             value.status === 'requested' &&
             value.startLat &&
@@ -102,7 +146,8 @@ const RideRequests = () => {
             );
             console.log(`Distance to ${key}: ${distance} km`);
   
-            if (distance <= 25) {
+            // ✅ Increase distance limit to 50km for better coverage
+            if (distance <= 50) {
               filtered.push({
                 id: key,
                 ...value,
@@ -111,7 +156,7 @@ const RideRequests = () => {
             }
           }
         });
-        console.log(filtered);
+        console.log('Filtered ride requests:', filtered);
         setRideRequests(filtered);
       } else {
         setRideRequests([]);
@@ -180,7 +225,7 @@ const RideRequests = () => {
       );
       
       const querySnapshot = await getDocs(q);
-      const requests = [];
+      const requests: any[] = [];
       
       querySnapshot.forEach((doc) => {
         requests.push({
@@ -199,18 +244,22 @@ const RideRequests = () => {
     }
   };
   
-  const handleAcceptRide = async (rideId) => {
+  const handleAcceptRide = async (rideId: string) => {
     if (!auth.currentUser) return;
   
     try {
       setProcessingId(rideId);
       
-      const uid=await AsyncStorage.getItem('uid');
-      const driverRef = doc(collection(db, 'drivers'), uid);
+      const uid = auth.currentUser?.uid;
+      if (!uid) {
+        throw new Error('Driver ID not found');
+      }
+      
+      const driverRef = doc(db, 'drivers', uid);
       const driverSnap = await getDoc(driverRef);
   
-      let driverData;
-      let vehicleInfo;
+      let driverData: any;
+      let vehicleInfo: any;
       if (driverSnap.exists()) {
          driverData = driverSnap.data();
          console.log("Driver Data:", driverData);
@@ -218,8 +267,7 @@ const RideRequests = () => {
         
         console.log("Vehicle Info:", vehicleInfo);
       }
-      const dbRT = getDatabase();
-      const rideRef = ref(dbRT, `rideRequests/${rideId}`);
+      const rideRef = ref(realtimeDb, `rideRequests/${rideId}`);
       const rideSnap = await get(rideRef);
   
       if (!rideSnap.exists()) {
@@ -235,7 +283,7 @@ const RideRequests = () => {
         latitude: rideData.endLat,
         longitude: rideData.endLong
       };
-      let driverName
+      let driverName: string;
       
       const driverDoc = await getDoc(doc(db, 'drivers', uid));
       if (driverDoc.exists()) {
@@ -269,24 +317,57 @@ const RideRequests = () => {
           longitude,
         },
         vehicleInfo: {
-          make: vehicleInfo.make,
-          model: vehicleInfo.model,
-          color: vehicleInfo.color,
-          licensePlate: vehicleInfo.licensePlate,
-          year: vehicleInfo.year,
+          make: vehicleInfo?.make || 'N/A',
+          model: vehicleInfo?.model || 'N/A',
+          color: vehicleInfo?.color || 'N/A',
+          licensePlate: vehicleInfo?.licensePlate || 'N/A',
+          year: vehicleInfo?.year || 'N/A',
         },
         driverAccepted: true,
+        acceptedAt: new Date().toISOString(),
       });
+
+      // ✅ Also update the Firestore history document with driver information
+      try {
+        const historyQuery = query(
+          collection(db, 'history'),
+          where('rideID', '==', rideId)
+        );
+        
+        const historySnapshot = await getDocs(historyQuery);
+        if (!historySnapshot.empty) {
+          const historyDoc = historySnapshot.docs[0];
+          await updateDoc(historyDoc.ref, {
+            driverID: auth.currentUser.uid,
+            driverName: driverName,
+            status: 'active',
+            driverAccepted: true,
+            acceptedAt: new Date(),
+          });
+          console.log('✅ Updated Firestore history with driver info');
+        }
+      } catch (historyError) {
+        console.log('Could not update Firestore history:', historyError);
+      }
+
+      // ✅ Start location tracking for this ride
+      try {
+        await locationTrackingService.startDriverTracking(rideId, auth.currentUser.uid);
+        console.log('🚗 Location tracking started for ride:', rideId);
+      } catch (trackingError) {
+        console.error('Warning: Could not start location tracking:', trackingError);
+        // Don't fail the ride acceptance if tracking fails
+      }
   
       setRideRequests(prev => prev.filter(ride => ride.id !== rideId));
       Alert.alert('Success', 'Ride accepted successfully!');
-      navigation.navigate('DriverRouteScreen', {
+      (navigation as any).navigate('DriverRouteScreen', {
         origin,
         destination,
         realtimeId: rideId,
       });
   
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error accepting ride:', error);
       Alert.alert('Error', `Failed to accept ride: ${error.message}`);
     } finally {
@@ -301,8 +382,7 @@ const RideRequests = () => {
     try {
       setProcessingId(rideId);
   
-      const dbRT = getDatabase();
-      const rideRef = ref(dbRT, `rideRequests/${rideId}`);
+      const rideRef = ref(realtimeDb, `rideRequests/${rideId}`);
       const rideSnap = await get(rideRef);
   
       if (!rideSnap.exists()) {
@@ -341,12 +421,30 @@ const RideRequests = () => {
     return (
       <View style={styles.container}>
         <View style={styles.iconWrapper}>
-          <UserX size={60} color="#9ca3af" />
+          <Text style={styles.iconText}>🚫</Text>
         </View>
         <Text style={styles.title}>You're Unavailable</Text>
         <Text style={styles.subtitle}>
           To receive ride requests, please change your status to available.
         </Text>
+        <TouchableOpacity 
+          style={styles.refreshButton} 
+          onPress={() => {
+            // Force refresh driver status
+            const uid = auth.currentUser?.uid;
+            if (uid) {
+              getDoc(doc(db, 'drivers', uid)).then((snapshot) => {
+                if (snapshot.exists()) {
+                  const data = snapshot.data();
+                  setDriverAvailable(data.status === 'available' ? true : false);
+                  setIsVerified(data.isVerified);
+                }
+              });
+            }
+          }}
+        >
+          <Text style={styles.refreshButtonText}>Refresh Status</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -360,8 +458,20 @@ const RideRequests = () => {
   
   return (
     <View style={styles.container}>
+      {/* Debug status display */}
+      <View style={[styles.debugStatus, { backgroundColor: driverAvailable ? '#10b981' : '#ef4444' }]}>
+        <Text style={styles.debugStatusText}>
+          Driver Status: {driverAvailable ? 'Available' : 'Unavailable'} | 
+          Verified: {isVerified ? 'Yes' : 'No'}
+        </Text>
+        <Text style={styles.debugStatusText}>
+          Auth UID: {auth.currentUser?.uid || 'None'} | 
+          Loading: {loading ? 'Yes' : 'No'}
+        </Text>
+      </View>
+      
       <View style={styles.headerRow}>
-        <Text style={styles.title}>         Available Ride Requests</Text>
+        <Text style={styles.title}>Available Ride Requests</Text>
       </View>
       
       {rideRequests.length === 0 ? (
@@ -414,6 +524,17 @@ const RideRequests = () => {
                 <Text style={styles.detailLabel}>Est. Fare:</Text>
                 <Text style={styles.detailValue}>{item.amount || 'Not calculated'}</Text>
               </View>
+              
+              {/* Route Map */}
+              {item.startLat && item.startLong && item.endLat && item.endLong && (
+                <RideMap
+                  startLat={item.startLat}
+                  startLong={item.startLong}
+                  endLat={item.endLat}
+                  endLong={item.endLong}
+                  height={120}
+                />
+              )}
               
               {/* Only show action buttons for non-rejected rides */}
               {item.status !== 'Completed' && (
@@ -596,6 +717,21 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     marginTop: 8,
     color: '#6b7280', // Tailwind's gray-500
     textAlign: 'center',
+  },
+  iconText: {
+    fontSize: 60,
+    textAlign: 'center',
+  },
+  debugStatus: {
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  debugStatusText: {
+    fontSize: 14,
+    color: 'white',
+    fontWeight: '500',
   },
 });
 

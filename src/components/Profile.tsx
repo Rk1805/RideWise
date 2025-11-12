@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../service/firebase';
 import { useTheme } from '../service/themeContext';
+import { Clipboard } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
 const Profile = () => {
   const { isDarkMode } = useTheme();
+  const navigation = useNavigation<any>();
   const currentUser = auth.currentUser;
 
   const [userData, setUserData] = useState({
@@ -19,6 +22,7 @@ const Profile = () => {
       model: '',
       year: '',
     },
+    userId: '', // Added userId to state
   });
 
   useEffect(() => {
@@ -38,6 +42,7 @@ const Profile = () => {
           model: '',
           year: '',
         };
+        let userId = '';
 
         if (userType === 'driver') {
           const driverRef = doc(db, 'drivers', uid);
@@ -47,6 +52,7 @@ const Profile = () => {
             const data = driverSnap.data();
             username = data.username || username;
             email = data.email || email;
+            userId = uid; // Set userId for driver
 
             if (data.vehicleInfo) {
               vehicle = {
@@ -66,17 +72,27 @@ const Profile = () => {
             const data = userSnap.data();
             username = data.username || username;
             email = data.email || email;
+            userId = uid; // Set userId for user
           }
         }
 
-        setUserData({ username, email, vehicle });
+        setUserData({ username, email, vehicle, userId });
       } catch (error) {
-        console.error('❌ Error fetching user data:', error);
+        // Error fetching user data
       }
     };
 
     fetchUserData();
   }, [currentUser]);
+
+  const copyUserId = () => {
+    Clipboard.setString(userData.userId);
+    Alert.alert('Copied!', 'User ID copied to clipboard');
+  };
+
+  const goToShareID = () => {
+    navigation.navigate('ShareTravelerID');
+  };
 
   const styles = getStyles(isDarkMode);
 
@@ -90,6 +106,21 @@ const Profile = () => {
       <Text style={styles.value}>{userData.username}</Text>
       <Text style={styles.label}>Email:</Text>
       <Text style={styles.value}>{userData.email}</Text>
+      
+      {/* User ID Section */}
+      <Text style={styles.label}>User ID:</Text>
+      <TouchableOpacity onPress={copyUserId} style={styles.userIdContainer}>
+        <Text style={styles.userIdText}>{userData.userId}</Text>
+        <Text style={styles.copyText}>📋 Tap to copy</Text>
+      </TouchableOpacity>
+      <Text style={styles.userIdHelp}>
+        Share this ID with companions who want to track your rides
+      </Text>
+
+      {/* Share ID Button */}
+      <TouchableOpacity onPress={goToShareID} style={styles.shareButton}>
+        <Text style={styles.shareButtonText}>📤 Share My ID</Text>
+      </TouchableOpacity>
 
       {/* Show vehicle info only if filled */}
       {userData.vehicle.make ? (
@@ -129,6 +160,47 @@ const getStyles = (isDarkMode: boolean) =>
     value: {
       fontSize: 16,
       color: isDarkMode ? '#d1d5db' : '#374151',
+    },
+    userIdContainer: {
+      backgroundColor: isDarkMode ? '#2a2a2a' : '#f3f4f6',
+      padding: 10,
+      borderRadius: 8,
+      marginVertical: 5,
+      alignItems: 'center',
+      minWidth: 200,
+    },
+    userIdText: {
+      fontSize: 14,
+      fontFamily: 'monospace',
+      color: isDarkMode ? '#ffffff' : '#1f2937',
+      textAlign: 'center',
+      marginBottom: 5,
+    },
+    copyText: {
+      fontSize: 12,
+      color: isDarkMode ? '#9ca3af' : '#6b7280',
+      fontStyle: 'italic',
+    },
+    userIdHelp: {
+      fontSize: 12,
+      color: isDarkMode ? '#9ca3af' : '#6b7280',
+      textAlign: 'center',
+      marginTop: 5,
+      marginBottom: 10,
+      paddingHorizontal: 20,
+    },
+    shareButton: {
+      backgroundColor: '#3b82f6',
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderRadius: 8,
+      marginTop: 10,
+      marginBottom: 20,
+    },
+    shareButtonText: {
+      color: '#ffffff',
+      fontSize: 16,
+      fontWeight: '600',
     },
   });
 

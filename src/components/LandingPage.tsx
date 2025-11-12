@@ -6,7 +6,7 @@ import { useTheme } from '../service/themeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LandingPage = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { isDarkMode } = useTheme();
   
   // Optional: Check authentication status when landing page loads
@@ -63,6 +63,30 @@ const LandingPage = () => {
           <Text style={[styles.optionText, isDarkMode && styles.darkText]}>Driver</Text>
           <Text style={[styles.optionDescription, isDarkMode && styles.darkText]}>
             Offer rides and earn money
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.adminContainer}>
+        <TouchableOpacity 
+          style={[styles.adminCard, isDarkMode && styles.darkAdminCard]} 
+          onPress={() => navigation.navigate('AdminLogin')}
+        >
+          <Text style={[styles.adminIcon, isDarkMode && styles.darkText]}>👑</Text>
+          <Text style={[styles.adminText, isDarkMode && styles.darkText]}>Admin</Text>
+          <Text style={[styles.adminDescription, isDarkMode && styles.darkText]}>
+            Monitor all rides and system status
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.companionCard, isDarkMode && styles.darkCompanionCard]} 
+          onPress={() => navigation.navigate('CompanionUserRegistration')}
+        >
+          <Text style={[styles.companionIcon, isDarkMode && styles.darkText]}>👥</Text>
+          <Text style={[styles.companionText, isDarkMode && styles.darkText]}>Companion</Text>
+          <Text style={[styles.companionDescription, isDarkMode && styles.darkText]}>
+            Track family members' rides
           </Text>
         </TouchableOpacity>
       </View>
@@ -130,7 +154,79 @@ const styles = StyleSheet.create({
   },
   darkText: {
     color: '#f3f4f6',
-  }
+  },
+  adminContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  adminCard: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
+    width: '48%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: '#f59e0b',
+  },
+  darkAdminCard: {
+    backgroundColor: '#2a2a2a',
+    borderColor: '#fbbf24',
+  },
+  adminIcon: {
+    fontSize: 40,
+    marginBottom: 10,
+  },
+  adminText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    color: '#f59e0b',
+  },
+  adminDescription: {
+    fontSize: 12,
+    textAlign: 'center',
+    color: '#64748b',
+  },
+  companionCard: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
+    width: '48%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: '#3b82f6',
+  },
+  darkCompanionCard: {
+    backgroundColor: '#2a2a2a',
+    borderColor: '#60a5fa',
+  },
+  companionIcon: {
+    fontSize: 40,
+    marginBottom: 10,
+  },
+  companionText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    color: '#3b82f6',
+  },
+  companionDescription: {
+    fontSize: 12,
+    textAlign: 'center',
+    color: '#64748b',
+  },
+
 });
 
 export default LandingPage;

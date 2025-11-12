@@ -23,6 +23,17 @@ import {
 } from 'firebase/firestore';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
+import { 
+  realtimeDb 
+} from '../service/firebase'; // Adjust this path if needed
+import { 
+  ref as rtdbRef, 
+  query as rtdbQuery, 
+  orderByChild, 
+  equalTo, 
+  get, 
+  limitToLast 
+} from "firebase/database";
 
 const MembersScreen = () => {
   const navigation = useNavigation();
@@ -34,6 +45,7 @@ const MembersScreen = () => {
   const [email, setEmail] = useState('');
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false); // For loading state
 
   useEffect(() => {
     fetchGroupMembers();
@@ -149,7 +161,57 @@ const MembersScreen = () => {
   };
 
   const handleBookRide = () => {
-    navigation.navigate('RideBooking');
+    navigation.navigate('CarpoolBooking', { groupId: groupId });
+  };
+
+  const handleViewActiveRide = async () => {
+    setIsLoading(true);
+    try {
+      // Query 'rideRequests' node where 'groupId' matches this screen's groupId
+      const rideRequestRef = rtdbRef(realtimeDb, 'rideRequests');
+      const rideQuery = rtdbQuery(
+        rideRequestRef,
+        orderByChild('groupId'),
+        equalTo(groupId),
+        limitToLast(10) // Check the last 10 rides for this group
+      );
+
+      const snapshot = await get(rideQuery);
+
+      if (!snapshot.exists()) {
+        Alert.alert('No Rides Found', 'There are no active carpool rides for this group.');
+        setIsLoading(false);
+        return;
+      }
+
+      let activeRide = null;
+      let activeRideId = null;
+
+      // Loop through the results to find one that is active
+      snapshot.forEach((childSnapshot) => {
+        const ride = childSnapshot.val();
+        const status = ride.status;
+        
+        // Define what "active" means
+        if (status === 'requested' || status === 'accepted' || status === 'ongoing') {
+          activeRide = ride;
+          activeRideId = childSnapshot.key;
+        }
+      });
+
+      if (activeRide) {
+        // Found an active ride, navigate to the waiting screen
+        navigation.navigate('CarpoolWaiting', { origin: { latitude: activeRide.startLat, longitude: activeRide.startLong }, destination: { latitude: activeRide.endLat, longitude: activeRide.endLong }, realtimeId: activeRideId});
+      } else {
+        Alert.alert('No Rides Found', 'There are no active carpool rides for this group.');
+      }
+
+    } catch (error) {
+      console.error("Error finding active ride:", error);
+      Alert.alert('Error', 'Could not search for active rides.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -200,8 +262,21 @@ const MembersScreen = () => {
 
 
 
-        <TouchableOpacity style={styles.rideButton} onPress={handleBookRide}>
-          <Text style={styles.rideButtonText}>Book Ride</Text>
+        <TouchableOpacity 
+          style={styles.viewRideButton} 
+          onPress={handleViewActiveRide}
+          disabled={isLoading}
+        >
+          <Text style={styles.rideButtonText}>
+            {isLoading ? 'Searching...' : 'View Active Carpool'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.rideButton} 
+          onPress={handleBookRide}
+        >
+          <Text style={styles.rideButtonText}>Book New Carpool</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -223,6 +298,21 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontWeight: 'bold',
   },
+  viewRideButton: {
+    marginTop: 10,
+    backgroundColor: '#ffc107', // A different color (e.g., yellow)
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  rideButton: {
+    marginTop: 10, // Changed from 40
+    backgroundColor: '#28a745',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+
   input: {
     borderWidth: 1,
     borderColor: '#bbb',

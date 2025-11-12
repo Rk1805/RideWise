@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, ScrollView, Dimensions, ColorValue } from 'react-native';
 import { useTheme } from '../service/themeContext';
 import { auth, db } from '../service/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -120,7 +120,12 @@ const AnalyticsScreen = () => {
   );
 };
 
-const StatCard = ({ icon, label, value, gradient }: { icon: string; label: string; value: string | number; gradient: string[] }) => (
+const StatCard = ({ icon, label, value, gradient }: { 
+  icon: keyof typeof MaterialCommunityIcons.glyphMap; 
+  label: string; 
+  value: string | number; 
+  gradient: [ColorValue, ColorValue, ...ColorValue[]] 
+}) => (
   <LinearGradient colors={gradient} style={styles.statCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
     <MaterialCommunityIcons name={icon} size={26} color="#fff" style={{ marginBottom: 6 }} />
     <Text style={styles.statLabel}>{label}</Text>

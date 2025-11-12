@@ -1,233 +1,171 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Alert, TextInput, Modal, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform ,Button} from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
-import MapViewDirections from 'react-native-maps-directions';
-import * as Location from 'expo-location';
-import { getDatabase, ref, get,set , ref as dbRef,update,remove,onValue} from 'firebase/database';
-import { useRoute, useNavigation } from '@react-navigation/native';
-import { collection,addDoc } from 'firebase/firestore';
-import { db ,auth} from '../service/firebase';
-import { Rating } from 'react-native-ratings';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { ref, onValue, off, update } from 'firebase/database';
+import { realtimeDb } from '../service/firebase';
+import { useTheme } from '../service/themeContext';
+import locationTrackingService from '../service/locationTrackingService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type RouteParams = {
-  origin: { latitude: number; longitude: number };
-  destination: { latitude: number; longitude: number };
-  realtimeId: string;
-};
+const { width, height } = Dimensions.get('window');
 
 const DriverRouteScreen = () => {
-  const mapRef = useRef<MapView>(null);
+  const { isDarkMode } = useTheme();
   const navigation = useNavigation();
-  const route = useRoute();
-  const { origin, destination, realtimeId } = (route.params || {}) as RouteParams;
+  const route = useRoute<any>();
+  const { origin, destination, realtimeId } = route.params;
 
-  const [currentStep, setCurrentStep] = useState<'pickup' | 'drop'>('pickup');
-  const [otp, setOtp] = useState('');
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [expectedOtp, setExpectedOtp] = useState('');
-  const [otpModalVisible, setOtpModalVisible] = useState(false);
-  const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [rideStatus, setRideStatus] = useState('active');
+  const [currentLocation, setCurrentLocation] = useState<any>(null);
+  const [rideData, setRideData] = useState<any>(null);
+  const [isTracking, setIsTracking] = useState(false);
 
   useEffect(() => {
-    let locationSubscription: Location.LocationSubscription | null = null;
-    const startWatchingLocation = async () => {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission Denied', 'Location permission is required.');
-          return;
-        }
-      
-        locationSubscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 5000,
-            distanceInterval: 10,
-          },
-          async (location) => {
-            const { latitude, longitude } = location.coords;
-            const newLocation = { latitude, longitude };
-            setDriverLocation(newLocation);
-      
-            // ⬇️ Send driver's location to Firebase
-            try {
-              const db = getDatabase();
-              await set(ref(db, `rideRequests/${realtimeId}/driverLocation`), newLocation);
-            } catch (error) {
-              console.error("Failed to update driver's location in Firebase:", error);
-            }
-      
-            // Center map to new location
-            mapRef.current?.animateToRegion({
-              ...newLocation,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            });
-          }
-        );
-      
-      };
+    if (!realtimeId) return;
 
-      startWatchingLocation();
-
-      return () => {
-        locationSubscription?.remove(); // ✅ Proper cleanup
-      };
-  }, []);
-
-  const fetchOtpFromDB = async () => {
-    try {
-      const db = getDatabase();
-      const otpRef = ref(db, `rideRequests/${realtimeId}/otp`);
-      const snapshot = await get(otpRef);
+    // Real-time listener for ride updates
+    const rideRef = ref(realtimeDb, `rideRequests/${realtimeId}`);
+    
+    const unsubscribe = onValue(rideRef, (snapshot) => {
       if (snapshot.exists()) {
-        setExpectedOtp(snapshot.val());
-        setOtpModalVisible(true);
-      } else {
-        Alert.alert('Error', 'OTP not found in database');
-      }
-    } catch (error) {
-      console.error('Error fetching OTP:', error);
-      Alert.alert('Error', 'Failed to fetch OTP');
-    }
-  };
-
-  const haversineDistance = (lat1, lon1, lat2, lon2) => {
-    const toRad = (val) => (val * Math.PI) / 180;
-    const R = 6371; // Earth radius in km
-  
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-  
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
-  const calculateDuration = (startTime: string, endTime: string) => {
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-  
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      console.error('Invalid date format for duration calculation', { startTime, endTime });
-      return 0;
-    }
-  
-    const durationInMs = end.getTime() - start.getTime();
-    return Math.floor(durationInMs / 60000);
-  };
-
-  const handleOtpSubmit = async () => {
-    if (otp.trim() === expectedOtp.toString()) {
-      try {
-        setOtpVerified(true);
-        const db = getDatabase();
-        const rideRef = dbRef(db, `rideRequests/${realtimeId}`);
-  
-        // Mark OTP as verified in Firebase
-        await update(rideRef, { otpVerified: true });
-        await update(rideRef, { isRideCompleted: false }); // Check if ride is completed
-  
-        setOtpModalVisible(false);
-        Alert.alert('OTP Verified', 'Navigating to drop location...');
-        setCurrentStep('drop'); // If you use this state to control navigation or map
-      } catch (error) {
-        console.error('Failed to update otpVerified in Firebase:', error);
-        Alert.alert('Error', 'Could not verify OTP. Please try again.');
-      }
-    } else {
-      Alert.alert('Invalid OTP', 'Please try again');
-    }
-  };
-
-  const handleDropoff = async () => {
-    try {
-      const d = getDatabase();
-      const rideRef = dbRef(d, `rideRequests/${realtimeId}`);
-      
-      // Fetch actual ride data
-      const snapshot = await get(rideRef);
-      const rideData = snapshot.val();
-  
-      if (!rideData) {
-        Alert.alert('Error', 'No ride data found.');
-        return;
-      }
-  
-      // Mark ride as completed in Firebase
-      await update(rideRef, { isRideCompleted: true ,isUserConfirmed:false});
-  
-      Alert.alert('Waiting for user confirmation', 'Please wait for the user to confirm the drop-off.');
-  
-      const unsubscribe = onValue(rideRef, async (snap) => {
-        const data = snap.val();
-        if (data && data.isUserConfirmed === true) {
-          unsubscribe(); // first stop listening
-          try {
-            // Save to Firestore history
-            const dist=haversineDistance(data.startLat, data.startLong,data.endLat,data.endLong);
-            const dur=calculateDuration(data.time, new Date().toISOString());
-            await addDoc(collection(db, 'driverHistory'), {
-              userId: data.userId,
-              date: new Date().toISOString(),
-              time: new Date().toLocaleTimeString(),
-              from: data.from,
-              to: data.to,
-              amount: Number(data.amount) || 100,
-              user: data.userName,
-              driverId:data.driverId,
-              status: 'Completed',
-              distance: dist,
-              duration: dur,
-              rating: data.Rating || 0,
-            });
-      
-            await remove(rideRef);
-      
-            Alert.alert('Ride Completed', 'Ride successfully completed and saved to history.');
-            navigation.goBack();
-          } catch (error) {
-            console.error('Error saving ride to history:', error);
-          }
+        const data = snapshot.val();
+        setRideData(data);
+        setRideStatus(data.status);
+        
+        if (data.driverLocation) {
+          setCurrentLocation(data.driverLocation);
         }
+      }
+    });
+
+    return () => {
+      off(rideRef);
+      unsubscribe();
+    };
+  }, [realtimeId]);
+
+  // Start location tracking when component mounts
+  useEffect(() => {
+    const startTracking = async () => {
+      try {
+        const uid = await AsyncStorage.getItem('uid');
+        if (uid && realtimeId) {
+          await locationTrackingService.startDriverTracking(realtimeId, uid);
+          setIsTracking(true);
+          console.log('🚗 Location tracking started in DriverRouteScreen');
+        }
+      } catch (error) {
+        console.error('Error starting location tracking:', error);
+      }
+    };
+
+    startTracking();
+
+    // Cleanup tracking when component unmounts
+    return () => {
+      if (isTracking) {
+        locationTrackingService.stopTracking();
+        setIsTracking(false);
+      }
+    };
+  }, [realtimeId]);
+
+  const handleStartRide = async () => {
+    try {
+      const rideRef = ref(realtimeDb, `rideRequests/${realtimeId}`);
+      await update(rideRef, {
+        status: 'in_progress',
+        rideStartedAt: new Date().toISOString(),
+        rideStarted: true,
       });
+
+      setRideStatus('in_progress');
+      Alert.alert('Ride Started', 'You have started the ride. Safe driving!');
     } catch (error) {
-      console.error('Failed to mark ride as completed:', error);
-      Alert.alert('Error', 'Could not complete the ride. Please try again.');
+      Alert.alert('Error', 'Failed to start ride. Please try again.');
+    }
+  };
+
+  const handleCompleteRide = async () => {
+    try {
+      const rideRef = ref(realtimeDb, `rideRequests/${realtimeId}`);
+      await update(rideRef, {
+        status: 'completed',
+        rideCompletedAt: new Date().toISOString(),
+        rideCompleted: true,
+      });
+
+      // ✅ Also update the Firestore history collection
+      try {
+        const { collection, query, where, getDocs, updateDoc } = await import('firebase/firestore');
+        const { db } = await import('../service/firebase');
+        
+        const historyQuery = query(
+          collection(db, 'history'),
+          where('rideID', '==', realtimeId)
+        );
+        
+        const historySnapshot = await getDocs(historyQuery);
+        if (!historySnapshot.empty) {
+          const historyDoc = historySnapshot.docs[0];
+          await updateDoc(historyDoc.ref, {
+            status: 'completed',
+            rideCompleted: true,
+            rideCompletedAt: new Date(),
+          });
+          console.log('✅ Updated Firestore history with ride completion');
+        }
+      } catch (historyError) {
+        console.log('Could not update Firestore history:', historyError);
+      }
+
+      // Stop location tracking
+      locationTrackingService.stopTracking();
+      setIsTracking(false);
+
+      setRideStatus('completed');
+      Alert.alert(
+        'Ride Completed', 
+        'Ride has been completed successfully!',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('DriverDashboard' as never)
+          }
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to complete ride. Please try again.');
     }
   };
 
   const handleCancelRide = async () => {
     Alert.alert(
-      "Cancel Ride",
-      "Are you sure you want to cancel this ride? It will be made available for other drivers.",
+      'Cancel Ride',
+      'Are you sure you want to cancel this ride?',
       [
+        { text: 'No', style: 'cancel' },
         {
-          text: "No",
-          style: "cancel",
-        },
-        {
-          text: "Yes, Cancel",
-          style: "destructive",
+          text: 'Yes',
+          style: 'destructive',
           onPress: async () => {
             try {
-                const db = getDatabase();
-                const rideRef = dbRef(db, `rideRequests/${realtimeId}`);
-  
+              const rideRef = ref(realtimeDb, `rideRequests/${realtimeId}`);
               await update(rideRef, {
-                driverAccepted: false,
-                status: "requested", // Optional: mark ride as still available
+                status: 'cancelled',
+                rideCancelledAt: new Date().toISOString(),
+                rideCancelled: true,
               });
-  
-              // Optionally remove from Realtime DB if you store active drivers
-  
-              Alert.alert("Ride Cancelled");
-              navigation.goBack(); // or navigate to RideRequests again
+
+              // Stop location tracking
+              locationTrackingService.stopTracking();
+              setIsTracking(false);
+
+              setRideStatus('cancelled');
+              Alert.alert('Ride Cancelled', 'Ride has been cancelled.');
+              navigation.goBack();
             } catch (error) {
-              console.error("Error cancelling ride:", error);
-              Alert.alert("Error", "Something went wrong while cancelling the ride.");
+              Alert.alert('Error', 'Failed to cancel ride. Please try again.');
             }
           },
         },
@@ -235,189 +173,270 @@ const DriverRouteScreen = () => {
     );
   };
 
+  const getStatusColor = () => {
+    switch (rideStatus) {
+      case 'active':
+        return '#10b981';
+      case 'in_progress':
+        return '#3b82f6';
+      case 'completed':
+        return '#8b5cf6';
+      case 'cancelled':
+        return '#ef4444';
+      default:
+        return '#6b7280';
+    }
+  };
+
+  const getStatusMessage = () => {
+    switch (rideStatus) {
+      case 'active':
+        return 'Heading to pickup location';
+      case 'in_progress':
+        return 'Ride in progress';
+      case 'completed':
+        return 'Ride completed';
+      case 'cancelled':
+        return 'Ride cancelled';
+      default:
+        return 'Processing ride';
+    }
+  };
+
   return (
-    <View style={{ flex: 1 }}>
-      <MapView
-        ref={mapRef}
-        style={{ flex: 1 }}
-        showsUserLocation
-        followsUserLocation
-        initialRegion={{
-          latitude: origin.latitude,
-          longitude: origin.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        }}
-      >
-        <Marker coordinate={origin} title="Pickup Location" />
-        <Marker coordinate={destination} title="Drop Location" pinColor="green" />
-
-        {driverLocation && (
-        <MapViewDirections
-            origin={driverLocation}
-            destination={currentStep === 'pickup' ? origin : destination}
-            apikey={'AIzaSyBGdExMD_KJEa-QVVZGM4bsLbVLfxFMGLA'} // Use a secure way in prod
-            strokeWidth={4}
-            strokeColor="#007bff"
-            optimizeWaypoints={true}
-            onError={(err) => console.warn('Route error:', err)}
-        />
-        )}
-      </MapView>
-
-      {currentStep === 'pickup' && (
-        <TouchableOpacity style={styles.button} onPress={fetchOtpFromDB}>
-          <Text style={styles.buttonText}>Arrived at Pickup – Enter OTP</Text>
-        </TouchableOpacity>
-      )}
-
-      {currentStep === 'drop' && (
-        <View>
-            <View style={styles.dropTextContainer}>
-            <Text style={styles.dropText}>On the way to drop-off location...</Text>
-            
-            </View>
-            <TouchableOpacity style={styles.dropOffButton} onPress={handleDropoff}>
-                <Text style={styles.dropOffButtonText}>Dropped off</Text>
-            </TouchableOpacity>
+    <View style={[styles.container, isDarkMode && styles.darkContainer]}>
+      <View style={styles.header}>
+        <Text style={[styles.title, isDarkMode && styles.darkText]}>
+          Driver Route
+        </Text>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
+          <Text style={styles.statusText}>{getStatusMessage()}</Text>
         </View>
+      </View>
+
+      <View style={[styles.infoCard, isDarkMode && styles.darkCard]}>
+        <Text style={[styles.cardTitle, isDarkMode && styles.darkText]}>
+          Route Information
+        </Text>
         
-      )}
+        <View style={styles.routeInfo}>
+          <Text style={[styles.routeLabel, isDarkMode && styles.darkText]}>
+            🚀 Pickup Location:
+          </Text>
+          <Text style={[styles.routeValue, isDarkMode && styles.darkText]}>
+            {origin.latitude.toFixed(6)}, {origin.longitude.toFixed(6)}
+          </Text>
+        </View>
 
-        {!otpVerified && (
-        <Button
-            title="Cancel Ride"
-            onPress={handleCancelRide}
-            color="red"
-        />
+        <View style={styles.routeInfo}>
+          <Text style={[styles.routeLabel, isDarkMode && styles.darkText]}>
+            🎯 Destination:
+          </Text>
+          <Text style={[styles.routeValue, isDarkMode && styles.darkText]}>
+            {destination.latitude.toFixed(6)}, {destination.longitude.toFixed(6)}
+          </Text>
+        </View>
+
+        {currentLocation && (
+          <View style={styles.routeInfo}>
+            <Text style={[styles.routeLabel, isDarkMode && styles.darkText]}>
+              📍 Your Current Location:
+            </Text>
+            <Text style={[styles.routeValue, isDarkMode && styles.darkText]}>
+              {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
+            </Text>
+            <Text style={[styles.timestamp, isDarkMode && styles.darkText]}>
+              Last updated: {new Date(currentLocation.timestamp).toLocaleTimeString()}
+            </Text>
+          </View>
         )}
 
-      {/* OTP Modal */}
-      <Modal visible={otpModalVisible} animationType="slide" transparent>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Enter OTP</Text>
-            <TextInput
-              value={otp}
-              onChangeText={setOtp}
-              placeholder="Enter OTP"
-              keyboardType="numeric"
-              style={styles.input}
-            />
-            <TouchableOpacity style={styles.modalButton} onPress={handleOtpSubmit}>
-              <Text style={styles.modalButtonText}>Submit</Text>
-            </TouchableOpacity>
+        {rideData && (
+          <View style={styles.rideInfo}>
+            <Text style={[styles.rideLabel, isDarkMode && styles.darkText]}>
+              Passenger: {rideData.userName || 'Anonymous'}
+            </Text>
+            <Text style={[styles.rideLabel, isDarkMode && styles.darkText]}>
+              Estimated Fare: ₹{rideData.amount || 'N/A'}
+            </Text>
+            <Text style={[styles.rideLabel, isDarkMode && styles.darkText]}>
+              Distance: {rideData.distance || 'N/A'} km
+            </Text>
           </View>
-        </View>
-      </Modal>
+        )}
+      </View>
+
+      <View style={styles.actionButtons}>
+        {rideStatus === 'active' && (
+          <TouchableOpacity style={styles.startButton} onPress={handleStartRide}>
+            <Text style={styles.buttonText}>Start Ride</Text>
+          </TouchableOpacity>
+        )}
+
+        {rideStatus === 'in_progress' && (
+          <TouchableOpacity style={styles.completeButton} onPress={handleCompleteRide}>
+            <Text style={styles.buttonText}>Complete Ride</Text>
+          </TouchableOpacity>
+        )}
+
+        {(rideStatus === 'active' || rideStatus === 'in_progress') && (
+          <TouchableOpacity style={styles.cancelButton} onPress={handleCancelRide}>
+            <Text style={styles.cancelButtonText}>Cancel Ride</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={[styles.trackingStatus, isDarkMode && styles.darkCard]}>
+        <Text style={[styles.trackingText, isDarkMode && styles.darkText]}>
+          {isTracking ? '🟢 Location tracking active' : '🔴 Location tracking inactive'}
+        </Text>
+        <Text style={[styles.trackingSubtext, isDarkMode && styles.darkText]}>
+          Your location is being shared with the passenger
+        </Text>
+      </View>
     </View>
   );
 };
 
-export default DriverRouteScreen;
-
 const styles = StyleSheet.create({
-  modalContainer: {
+  container: {
     flex: 1,
-    backgroundColor: '#00000099',
-    justifyContent: 'center',
+    backgroundColor: '#f9f9f9',
+    padding: 20,
+  },
+  darkContainer: {
+    backgroundColor: '#121212',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 20,
   },
-  modalContent: {
-    backgroundColor: '#fff',
-    padding: 25,
-    borderRadius: 15,
-    width: '80%',
-    elevation: 5,
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1f2937',
   },
-  modalTitle: {
-    fontSize: 18,
+  darkText: {
+    color: '#f3f4f6',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusText: {
+    color: 'white',
+    fontSize: 12,
     fontWeight: '600',
+  },
+  infoCard: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  darkCard: {
+    backgroundColor: '#1f1f1f',
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 15,
+  },
+  routeInfo: {
+    marginBottom: 15,
+  },
+  routeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 5,
+  },
+  routeValue: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontFamily: 'monospace',
+  },
+  timestamp: {
+    fontSize: 10,
+    color: '#9ca3af',
+    fontStyle: 'italic',
+    marginTop: 5,
+  },
+  rideInfo: {
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    paddingTop: 15,
+    marginTop: 15,
+  },
+  rideLabel: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 5,
+  },
+  actionButtons: {
+    marginBottom: 20,
+  },
+  startButton: {
+    backgroundColor: '#10b981',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
     marginBottom: 10,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 10,
-    marginTop: 10,
-    borderRadius: 8,
-    fontSize: 16,
+  completeButton: {
+    backgroundColor: '#8b5cf6',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  modalButton: {
-    marginTop: 20,
-    backgroundColor: '#007bff',
-    paddingVertical: 10,
-    borderRadius: 8,
+  cancelButton: {
+    backgroundColor: '#ef4444',
+    padding: 15,
+    borderRadius: 10,
     alignItems: 'center',
   },
-  modalButtonText: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  button: {
-    position: 'absolute',
-    bottom: 30,
-    alignSelf: 'center',
-    backgroundColor: '#1E90FF', // softer blue
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 6,
-  },
-  
   buttonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
-  
-  dropTextContainer: {
-    position: 'absolute',
-    bottom: 100,
-    alignSelf: 'center',
-    backgroundColor: '#28a745',
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 6,
+  cancelButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
-  
-  dropText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  
-  dropOffButton: {
-    backgroundColor: '#1E90FF',
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 30,
+  trackingStatus: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
     alignItems: 'center',
-    justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 6,
-    marginTop: 120, // move it above the pickup button space
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  
-  dropOffButtonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+  trackingText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#059669',
+    marginBottom: 5,
   },
-  
+  trackingSubtext: {
+    fontSize: 12,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
 });
+
+export default DriverRouteScreen;

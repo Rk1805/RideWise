@@ -1,24 +1,26 @@
-import { View, Text, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import DashboardTemplate from './dashboardTemplate';
 import { useTheme } from '../service/themeContext';
 import { useEffect } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../service/firebase';
+import { Auth } from 'firebase/auth';
 
 const Dashboard = () => {
   const {isDarkMode}=useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
 
   useEffect(() => {
     if (!auth.currentUser) return;
     
     // Listen for rides that were recently accepted
-    const q = query(
-      collection(db, 'history'),
-      where('userId', '==', auth.currentUser.uid),
-      where('status', '==', 'accepted')
-    );
+          const q = query(
+        collection(db, 'history'),
+        where('userID', '==', auth.currentUser.uid),
+        where('status', '==', 'accepted')
+      );
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
@@ -63,33 +65,53 @@ const Dashboard = () => {
       source: require('../assets/x.png'),
       iconStyle: { width: 80, height: 60 }
     },
+    {
+      title: 'Share Ride ID',
+      description: 'Share your ride information with family.',
+      icon: 'share',
+      route: 'ShareTravelerID',
+      source: require('../assets/ridereq.png'),
+      iconStyle: { width: 80, height: 60 }
+    },
   ];
 
   const styles=getStyles(isDarkMode)
 
   return (
     <DashboardTemplate>
-      <View style={styles.container}>
-        {cardData.map((card, index) => (
-          <TouchableOpacity
-            key={index}
-            style={styles.card}
-            onPress={() => navigation.navigate(card.route as never)}
-          >
-            <Image source={card.source} style={[{ marginBottom: 8 }, card.iconStyle]} />
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.container}>
+          {cardData.map((card, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.card}
+              onPress={() => navigation.navigate(card.route as never)}
+            >
+              <Image source={card.source} style={[{ marginBottom: 8 }, card.iconStyle]} />
 
-
-            <Text style={styles.cardTitle}>{card.title}</Text>
-            <Text style={styles.cardDescription}>{card.description}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+              <Text style={styles.cardTitle}>{card.title}</Text>
+              <Text style={styles.cardDescription}>{card.description}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
     </DashboardTemplate>
   );
 };
 
 const getStyles = (isDarkMode: boolean) =>
   StyleSheet.create({
+  scrollContainer: {
+    flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
+    paddingBottom: 20,
+  },
   container: {
     flex: 1,
     paddingHorizontal: 16,
@@ -98,7 +120,7 @@ const getStyles = (isDarkMode: boolean) =>
   },
   card: {
     width: '100%',
-    paddingVertical: 30,
+    paddingVertical: 25,
     paddingHorizontal: 20,
     borderRadius: 12,
     alignItems: 'center',
@@ -110,18 +132,21 @@ const getStyles = (isDarkMode: boolean) =>
     zIndex: 0,
     marginBottom: 16,
     backgroundColor: isDarkMode ? '#1f1f1f' : '#f8f9fa',
+    minHeight: 120,
   },
   cardTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     marginTop: 10,
     color: '#3b82f6',
+    textAlign: 'center',
   },
   cardDescription: {
     fontSize: 16,
     textAlign: 'center',
     marginTop: 5,
     color: '#6b7280',
+    lineHeight: 22,
   },
 });
 

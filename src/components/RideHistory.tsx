@@ -1,14 +1,38 @@
-import { View, Text, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
+import React from 'react';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import { useTheme } from '../service/themeContext';
 import { db, auth } from '../service/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import RideRatingModal from './RideRatingModal';
+
+interface RideData {
+  id: string;
+  date: string;
+  time: string;
+  from: string;
+  to: string;
+  driverName?: string;
+  driverId?: string;
+  amount?: string;
+  status?: string;
+  type?: string;
+  rideID?: string;
+  userID?: string;
+  isRated?: boolean;
+  userRating?: number;
+  userComment?: string;
+  ratedAt?: Date;
+}
 
 const RideHistory = () => {
   const { isDarkMode } = useTheme();
-  const [rideData, setRideData] = useState([]);
+  const [rideData, setRideData] = useState<RideData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [selectedRide, setSelectedRide] = useState<RideData | null>(null);
+  const navigation = useNavigation<any>();
 
   const fetchRideHistory = async () => {
     try {
@@ -19,19 +43,37 @@ const RideHistory = () => {
         return;
       }
 
-      const q = query(collection(db, 'history'), where('userId', '==', user.uid));
+      const q = query(collection(db, 'history'), where('userID', '==', user.uid));
       const querySnapshot = await getDocs(q);
 
-      const rides = [];
+      const rides: RideData[] = [];
       querySnapshot.forEach((doc) => {
-        rides.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        rides.push({
+          id: doc.id,
+          date: data.date || data.timestamp?.toDate?.()?.toDateString() || 'N/A',
+          time: data.time || data.timestamp?.toDate?.()?.toTimeString() || 'N/A',
+          from: data.from || 'N/A',
+          to: data.to || 'N/A',
+          driverName: data.driverName || 'N/A',
+          driverId: data.driverId || data.driverID || 'N/A',
+          amount: data.amount || '0',
+          status: data.status || 'N/A',
+          type: data.type || 'individual',
+          rideID: data.rideID || data.rideId || doc.id,
+          userID: data.userID || data.userId || 'N/A',
+          isRated: data.isRated || false,
+          userRating: data.userRating || 0,
+          userComment: data.userComment || '',
+          ratedAt: data.ratedAt || null
+        } as RideData);
       });
       console.log('Fetched rides:', rides);
 
-      rides.sort((a, b) => new Date(b.date + ' ' + b.time) - new Date(a.date + ' ' + a.time));
+      rides.sort((a, b) => new Date(b.date + ' ' + b.time).getTime() - new Date(a.date + ' ' + a.time).getTime());
       setRideData(rides);
     } catch (error) {
-      console.error('Error fetching ride history:', error);
+      // Error fetching ride history
     } finally {
       setLoading(false);
     }
@@ -41,7 +83,19 @@ const RideHistory = () => {
     fetchRideHistory();
   }, []);
 
-  const formatDateTime = (dateStr, timeStr) => {
+  // Auto-show rating modal for newly completed rides
+  useEffect(() => {
+    const newlyCompletedRide = rideData.find(ride => 
+      ride.status === 'Completed' && !ride.isRated
+    );
+    
+    if (newlyCompletedRide) {
+      setSelectedRide(newlyCompletedRide);
+      setRatingModalVisible(true);
+    }
+  }, [rideData]);
+
+  const formatDateTime = (dateStr: string, timeStr: string) => {
     try {
       const dt = new Date(`${dateStr} ${timeStr}`);
       return new Intl.DateTimeFormat('en-IN', {
@@ -53,7 +107,7 @@ const RideHistory = () => {
     }
   };
 
-  const getStatusStyle = (status) => ({
+  const getStatusStyle = (status: string) => ({
     ...styles.statusBadge,
     backgroundColor: status === 'Completed' ? '#10b98133' : '#ef444433',
     color: status === 'Completed' ? '#10b981' : '#ef4444',
@@ -100,9 +154,79 @@ const RideHistory = () => {
                     Cost: ₹{item.amount}
                   </Text>
                 )}
+                
+                {/* Rating Button for Completed Rides */}
+                {item.status === 'Completed' && !item.isRated && (
+                  <TouchableOpacity
+                    style={styles.rateButton}
+                    onPress={() => {
+                      setSelectedRide(item);
+                      setRatingModalVisible(true);
+                    }}
+                  >
+                    <Text style={styles.rateButtonText}>⭐ Rate This Ride</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* Share Ride Button for Active/Recent Rides */}
+                {(item.status === 'Accepted' || item.status === 'Started' || item.status === 'Completed') && (
+                  <TouchableOpacity
+                    style={[styles.rateButton, { backgroundColor: '#10b981', marginTop: 8 }]}
+                    onPress={() => {
+                      navigation.navigate('RideSharing', {
+                        rideId: item.rideID || item.id,
+                        from: item.from,
+                        to: item.to,
+                        driverName: item.driverName,
+                        driverPhone: 'N/A',
+                        cabNumber: 'N/A',
+                        estimatedArrival: new Date(),
+                        rideStatus: item.status || 'Unknown'
+                      });
+                    }}
+                  >
+                    <Text style={styles.rateButtonText}>📤 Share Ride</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* Show Rating if Already Rated */}
+                {item.status === 'Completed' && item.isRated && item.userRating && (
+                  <View style={styles.ratingDisplay}>
+                    <Text style={[styles.ratingText, { color: isDarkMode ? '#fbbf24' : '#d97706' }]}>
+                      {'★'.repeat(item.userRating)}{'☆'.repeat(5 - item.userRating)}
+                    </Text>
+                    <Text style={[styles.ratedText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
+                      Rated {item.userRating}/5
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           )}
+        />
+      )}
+      
+      {/* Rating Modal */}
+      {selectedRide && (
+        <RideRatingModal
+          visible={ratingModalVisible}
+          onClose={() => {
+            setRatingModalVisible(false);
+            setSelectedRide(null);
+            // Refresh ride history to show updated rating
+            fetchRideHistory();
+          }}
+          rideId={selectedRide.rideID || selectedRide.id}
+          rideData={{
+            from: selectedRide.from,
+            to: selectedRide.to,
+            driverName: selectedRide.driverName || 'Unknown Driver',
+            driverId: selectedRide.driverId || selectedRide.id,
+            amount: selectedRide.amount || '0',
+            distance: '0', // You might want to add distance to RideData interface
+            date: selectedRide.date,
+            time: selectedRide.time,
+          }}
         />
       )}
     </View>
@@ -160,6 +284,31 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     overflow: 'hidden',
     fontSize: 13,
+  },
+  rateButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 12,
+    alignSelf: 'flex-start',
+  },
+  rateButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  ratingDisplay: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  ratingText: {
+    fontSize: 18,
+    marginBottom: 4,
+  },
+  ratedText: {
+    fontSize: 12,
+    fontStyle: 'italic',
   },
 });
 

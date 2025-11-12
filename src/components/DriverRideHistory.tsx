@@ -7,6 +7,8 @@ import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, getDocs, updateDoc, doc, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../service/firebase';
 import { useTheme } from '../service/themeContext';
+import { realtimeDb } from '../service/firebase';
+import { ref, update } from 'firebase/database';
 
 const DriverRideHistory = () => {
   const { isDarkMode } = useTheme();
@@ -26,32 +28,63 @@ const DriverRideHistory = () => {
       
       if (!auth.currentUser) return;
       
-      // Query driver's ride history
+      console.log('🔍 Fetching ride history for driver:', auth.currentUser.uid);
+      
+      // ✅ Query the main 'history' collection for rides where this driver was assigned
       const q = query(
-        collection(db, 'driverHistory'),
-        where('driverId', '==', auth.currentUser.uid)
+        collection(db, 'history'),
+        where('driverID', '==', auth.currentUser.uid)
       );
       
       const querySnapshot = await getDocs(q);
       const historyItems = [];
       
+      console.log('📊 Found', querySnapshot.size, 'rides in history collection');
+      
       querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        console.log('🚗 Ride data:', { id: doc.id, status: data.status, from: data.from, to: data.to });
+        
         historyItems.push({
           id: doc.id,
-          ...doc.data()
+          ...data
         });
       });
       
-      // Sort by date (newest first)
+      // ✅ Also check for rides in 'carpool' collection if you have separate carpool rides
+      try {
+        const carpoolQuery = query(
+          collection(db, 'carpool'),
+          where('driverId', '==', auth.currentUser.uid)
+        );
+        
+        const carpoolSnapshot = await getDocs(carpoolQuery);
+        console.log('🚐 Found', carpoolSnapshot.size, 'carpool rides');
+        
+        carpoolSnapshot.forEach((doc) => {
+          const data = doc.data();
+          historyItems.push({
+            id: `carpool_${doc.id}`,
+            ...data,
+            type: 'carpool'
+          });
+        });
+      } catch (carpoolError) {
+        console.log('No carpool collection or error:', carpoolError);
+      }
+      
+      // ✅ Sort by timestamp (newest first)
       historyItems.sort((a, b) => {
-        const dateA = new Date(a.date + ' ' + a.time);
-        const dateB = new Date(b.date + ' ' + b.time);
-        return dateB.getTime() - dateA.getTime();
+        const timestampA = a.timestamp?.toDate?.() || new Date(a.date + ' ' + a.time) || new Date(0);
+        const timestampB = b.timestamp?.toDate?.() || new Date(b.date + ' ' + b.time) || new Date(0);
+        return timestampB.getTime() - timestampA.getTime();
       });
       
+      console.log('📋 Total history items:', historyItems.length);
       setRideHistory(historyItems);
+      
     } catch (error) {
-      console.error('Error fetching ride history:', error);
+      console.error('❌ Error fetching ride history:', error);
       Alert.alert('Error', 'Could not load ride history');
     } finally {
       setLoading(false);
@@ -72,34 +105,38 @@ const DriverRideHistory = () => {
       // Create a batch to ensure all updates happen together
       const batch = writeBatch(db);
       
-      // Update driver history
-      const driverHistoryRef = doc(db, 'driverHistory', rideId);
-      batch.update(driverHistoryRef, {
+      // ✅ Update the main history collection
+      const historyRef = doc(db, 'history', rideId);
+      batch.update(historyRef, {
         status: 'completed',
-        completedAt: timestamp
+        rideCompleted: true,
+        rideCompletedAt: timestamp
       });
       
-      // Update carpool document if it exists
-      if (ride.rideId) {
-        const carpoolRef = doc(db, 'carpool', ride.rideId);
-        batch.update(carpoolRef, {
-          status: 'completed',
-          completedAt: timestamp
-        });
-        
-        // Find and update user's history
-        const userHistoryQuery = query(
-          collection(db, 'driverHistory'),
-          where('rideId', '==', ride.rideId)
-        );
-        
-        const userHistorySnapshot = await getDocs(userHistoryQuery);
-        userHistorySnapshot.forEach((doc) => {
-          batch.update(doc.ref, {
+      // ✅ Also update carpool document if it exists
+      if (ride.rideID) {
+        try {
+          const carpoolRef = doc(db, 'carpool', ride.rideID);
+          batch.update(carpoolRef, {
             status: 'completed',
             completedAt: timestamp
           });
-        });
+        } catch (carpoolError) {
+          console.log('No carpool document to update:', carpoolError);
+        }
+      }
+      
+      // ✅ Update the ride request in Realtime Database if rideID exists
+      if (ride.rideID) {
+        try {
+          await update(ref(realtimeDb, `rideRequests/${ride.rideID}`), {
+            status: 'completed',
+            rideCompleted: true,
+            rideCompletedAt: timestamp.toISOString()
+          });
+        } catch (realtimeError) {
+          console.log('Could not update realtime database:', realtimeError);
+        }
       }
       
       // Commit all updates

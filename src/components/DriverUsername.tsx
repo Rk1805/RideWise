@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ColorValue } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import { doc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../service/firebase';
@@ -40,7 +40,7 @@ const DriverUsername = () => {
     }
   };
 
-  const gradientColors = isDarkMode
+  const gradientColors: [ColorValue, ColorValue, ...ColorValue[]] = isDarkMode
     ? ['#1a1c2e', '#111827']
     : ['#4776E6', '#8E54E9'];
 

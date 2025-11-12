@@ -1,301 +1,234 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Dimensions, TouchableOpacity,Alert } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
-import MapViewDirections from 'react-native-maps-directions';
-import { getDatabase, ref, onValue, off,ref as dbRef, set ,remove} from 'firebase/database';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ColorValue } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { ref, onValue, off, get, update } from 'firebase/database';
+import { realtimeDb } from '../service/firebase';
 import { useTheme } from '../service/themeContext';
-import { update} from 'firebase/database';
-import { collection,addDoc, updateDoc,doc, arrayUnion } from 'firebase/firestore';
-import {db,auth} from '../service/firebase';
-import { AirbnbRating } from 'react-native-ratings';
-import Modal from 'react-native-modal';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation,CommonActions } from '@react-navigation/native';
-import { GOOGLE_MAPS_API_KEY } from '@env';
+import { LinearGradient } from 'expo-linear-gradient';
+import RideRatingModal from './RideRatingModal';
 
-const { width, height } = Dimensions.get('window');
-
-type Props = {
-  route: {
-    params: {
-      origin: { latitude: number; longitude: number };
-      destination: { latitude: number; longitude: number };
-      realtimeId: string;
-    };
-  };
-};
-
-
-const RideWaiting: React.FC<Props> = ({ route }) => {
-  const navigation = useNavigation();
+const RideWaiting = () => {
   const { isDarkMode } = useTheme();
-  const mapRef = useRef<MapView>(null);
+  const navigation = useNavigation();
+  const route = useRoute<any>();
   const { origin, destination, realtimeId } = route.params;
 
-  const [rideStatus, setRideStatus] = useState<string>('requested');
-  const [driverDetails, setDriverDetails] = useState<{ driverId: string; driverName: string } | null>(null);
-  const [vehicleInfo, setVehicleInfo] = useState<{
-    make: string;
-    model: string;
-    year: string;
-    color: string;
-    licensePlate: string;
-  } | null>(null);
-  const [otp, setOtp] = useState<string | null>(null);
-  const [otpGenerated, setOtpGenerated] = useState<boolean>(false); // prevent multiple OTP generations
-  const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [showRatingModal, setShowRatingModal] = useState(false);
-  const [rating, setRating] = useState(0);
+  const [rideStatus, setRideStatus] = useState('waiting');
+  const [driverInfo, setDriverInfo] = useState<any>(null);
+  const [driverLocation, setDriverLocation] = useState<any>(null);
+  const [estimatedArrival, setEstimatedArrival] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [rideData, setRideData] = useState<any>(null);
 
-
-  // Fit map view
-  useEffect(() => {
-    if (mapRef.current) {
-      mapRef.current.fitToCoordinates([origin, destination], {
-        edgePadding: { top: 80, right: 80, bottom: 180, left: 80 },
-        animated: true,
-      });
-    }
-  }, [origin, destination]);
-
-  const calculateDuration = (startTime: string, endTime: string) => {
-    const start = new Date(startTime);
-    console.log('Start:', start);
-    const end = new Date(endTime);
-    console.log('End:', end);
-  
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      console.error('Invalid date format for duration calculation', { startTime, endTime });
-      return 0;
-    }
-  
-    const durationInMs = end.getTime() - start.getTime();
-    console.log('Duration in ms:', durationInMs);
-    return Math.floor(durationInMs / 60000);
-  };
-
-  const generateOtp = () => Math.floor(1000 + Math.random() * 9000).toString();
-
-  const listenToRideRequest = (realtimeId, setRideStatus, setDriverDetails) => {
-    if (!realtimeId) return; 
-    const d = getDatabase();
-    const rideRef = ref(d, `rideRequests/${realtimeId}`);
-  
-    const unsubscribe = onValue(rideRef, async (snapshot) => {
-      const rideData = snapshot.val();
-      console.log('Ride status updated:', rideData);
-  
-      if (rideData?.status) {
-        setRideStatus(rideData.status);
-  
-        if (rideData.status === 'active' && rideData.driverId && rideData.driverName) {
-          setDriverDetails({
-            driverId: rideData.driverId,
-            driverName: rideData.driverName,
-          });
-  
-          if (rideData.driverLocation?.longitude && rideData.driverLocation?.latitude) {
-            setDriverLocation({
-              latitude: rideData.driverLocation.latitude,
-              longitude: rideData.driverLocation.longitude,
-            });
-          }
-  
-          if (!rideData.otp && !otpGenerated) {
-            const generatedOtp = generateOtp();
-            await update(rideRef, { otp: generatedOtp, otpVerified: false });
-            setOtp(generatedOtp);
-            setOtpGenerated(true);
-          } else if (rideData.otp && !otp) {
-            setOtp(rideData.otp);
-          }
-  
-          if (rideData.otpVerified) {
-            setOtpVerified(true);
-          }
-          console.log(rideData)
-          if (rideData?.vehicleInfo) {
-            setVehicleInfo(rideData.vehicleInfo);
-          }
-          if(rideData?.driverAccepted){
-            setRideStatus('active');
-          }
-          if(!rideData.driverAccepted){
-            setRideStatus('requested');
-          }
-        }
-      }
-      if (rideData?.isRideCompleted && !rideData?.isUserConfirmed) {
-        console.log('Ride completed:', rideData);
-        Alert.alert(
-          'Ride Completed',
-          'Your driver has dropped you off. Confirm completion?',
-          [
-            {
-              text: 'Confirm',
-              onPress: async () => {
-                
-                console.log('User confirmed ride completion');
-                setShowRatingModal(true);         
-                const dur=calculateDuration(rideData.time, new Date().toISOString());
-                await addDoc(collection(db, 'history'), {
-                    userId: rideData.userId,
-                    date: new Date().toISOString(),
-                    time: new Date().toLocaleTimeString(),
-                    from: rideData.from,
-                    to: rideData.to,
-                    amount: Number(rideData.amount) || 100,
-                    user: rideData.userName,
-                    driverId:rideData.driverId,
-                    driverName:rideData.driverName,
-                    status: 'Completed',
-                    distance:rideData.distance,
-                    duration:dur,
-                  });
-              },
-            },
-            {
-              text: 'Cancel',
-              style: 'cancel',
-            },
-          ],
-          { cancelable: false }
-        );
-      }
-    });
-  
-    return () => off(rideRef);
-  };
-
-  // Listen for ride status updates
   useEffect(() => {
     if (!realtimeId) return;
 
-    const unsubscribe = listenToRideRequest(realtimeId, setRideStatus, setDriverDetails);
-    return unsubscribe;
-  }, [realtimeId]);
+    // Real-time listener for ride status and driver info
+    const rideRef = ref(realtimeDb, `rideRequests/${realtimeId}`);
+    
+    const unsubscribe = onValue(rideRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const rideData = snapshot.val();
+        setRideStatus(rideData.status);
+        
+        if (rideData.driverAccepted && rideData.driverId) {
+          setDriverInfo({
+            name: rideData.driverName || 'Driver',
+            phone: rideData.driverPhone || 'N/A',
+            vehicle: rideData.vehicleInfo || {},
+          });
+          
+          if (rideData.driverLocation) {
+            setDriverLocation(rideData.driverLocation);
+            calculateEstimatedArrival(rideData.driverLocation, destination);
+          }
+        }
+        
+        // Check if ride is completed and show rating modal
+        if (rideData.status === 'completed' && !rideData.isRated) {
+          setRideData(rideData);
+          setRatingModalVisible(true);
+        }
+        
+        setLoading(false);
+      }
+    });
 
-  const handleCancelBooking = async () => {
-    const db = getDatabase();
-    const rideRef = ref(db, `rideRequests/${realtimeId}`);
-    await remove(rideRef);
-    navigation.goBack();
-    setRideStatus('cancelled');
+    return () => {
+      off(rideRef);
+      unsubscribe();
+    };
+  }, [realtimeId, destination]);
+
+  const calculateEstimatedArrival = (driverLoc: any, dest: any) => {
+    if (!driverLoc || !dest) return;
+
+    // Simple distance calculation (you can use a more sophisticated algorithm)
+    const distance = Math.sqrt(
+      Math.pow(driverLoc.latitude - dest.latitude, 2) +
+      Math.pow(driverLoc.longitude - dest.longitude, 2)
+    ) * 111; // Rough conversion to km
+
+    const estimatedMinutes = Math.round(distance * 2); // Assuming 30 km/h average speed
+    setEstimatedArrival(`${estimatedMinutes} minutes`);
   };
 
-  return (
-    <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        showsUserLocation
-        followsUserLocation
-        initialRegion={{
-          latitude: origin.latitude,
-          longitude: origin.longitude,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }}
-        customMapStyle={isDarkMode ? darkMapStyle : []}
-      >
-        
-
-            {!otpVerified ? (
-            // Show route from driver to pickup
-            <>
-                {driverLocation && <Marker coordinate={driverLocation} title="Driver" pinColor="blue" />}
-                <Marker coordinate={origin} title="Pickup" />
-            </>
-            ) : (
-            // After OTP is verified, show route from pickup to destination
-            <>
-            <Marker coordinate={destination} title="destination" pinColor='red'/>
-            <MapViewDirections
-                origin={driverLocation}
-                destination={destination}
-                apikey={GOOGLE_MAPS_API_KEY}
-                strokeWidth={5}
-                strokeColor="#4CAF50"
-            />
-            </>
-        )}
-      </MapView>
-
-      <View style={[styles.waitingContainer, { backgroundColor: isDarkMode ? '#1e1e1e' : '#fff' }]}>
-        {rideStatus === 'active' && driverDetails ? (
-          <>
-            <Text style={[styles.waitingText, { color: isDarkMode ? '#fff' : '#000' }]}>
-              Driver Found!
-            </Text>
-            <Text style={[styles.waitingText, { color: '#FFA72F', marginTop: 5 }]}>
-              {driverDetails.driverName}
-            </Text>
-            {otp && rideStatus=='active' && (
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Driver Details</Text>
-
-                    <Text style={styles.infoText}>👤 {driverDetails.driverName}</Text>
-                    <Text style={styles.infoText}>🔐 OTP: <Text style={styles.highlight}>{otp}</Text></Text>
-
-                    <Text style={[styles.cardTitle, { marginTop: 15 }]}>Vehicle Info</Text>
-                    <Text style={styles.infoText}>🚗 {vehicleInfo.year} {vehicleInfo.make} {vehicleInfo.model}</Text>
-                    <Text style={styles.infoText}>🎨 Color: {vehicleInfo.color}</Text>
-                    <Text style={styles.infoText}>🔢 Plate: {vehicleInfo.licensePlate}</Text>
-                </View>
-             )}
-          </>
-        ) : (
-          <>
-            <Text style={[styles.waitingText, { color: isDarkMode ? '#fff' : '#000' }]}>
-              Looking for drivers...
-            </Text>
-            <ActivityIndicator size="large" color="#FFA72F" style={{ marginTop: 10 }} />
-            <TouchableOpacity onPress={()=>handleCancelBooking()}>
-                <Text style={[styles.waitingText, { color: '#FFA72F', marginTop: 15 }]}>
-                     Cancel Booking
-                </Text>
-            </TouchableOpacity>
-          </>
-        )}
-            <Modal isVisible={showRatingModal}>
-      <View style={styles.ratingContainer}>
-        <Text style={styles.ratingTitle}>Rate the driver</Text>
-        <AirbnbRating
-          defaultRating={5}
-          showRating={false}
-          onFinishRating={(value) => setRating(value)}
-        />
-        <TouchableOpacity
-          style={styles.ratingButton}
-          onPress={async () => {
-            setShowRatingModal(false);
+  const handleCancelRide = async () => {
+    Alert.alert(
+      'Cancel Ride',
+      'Are you sure you want to cancel this ride?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes',
+          style: 'destructive',
+          onPress: async () => {
             try {
-                const d = getDatabase();
-                console.log('rating:',rating)
-                const rideRef = ref(d, `rideRequests/${realtimeId}`);
-                await update(rideRef, { isUserConfirmed: true ,Rating:rating});
-              Alert.alert('Thank you!', 'Your rating has been submitted.');
+              const rideRef = ref(realtimeDb, `rideRequests/${realtimeId}`);
+              await update(rideRef, {
+                status: 'cancelled',
+                cancelledAt: new Date().toISOString(),
+                cancelledBy: 'user',
+              });
               
-              // ✅ Now reset navigation to Dashboard
-              navigation.dispatch(
-                CommonActions.reset({
-                  index: 0,
-                  routes: [{ name: 'Dashboard' }],
-                })
-              );
-            } catch (e) {
-              console.error('Rating submission error:', e);
-              Alert.alert('Error', 'Failed to submit rating.');
+              Alert.alert('Ride Cancelled', 'Your ride has been cancelled successfully.');
+              navigation.goBack();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to cancel ride. Please try again.');
             }
+          },
+        },
+      ]
+    );
+  };
+
+  const getStatusMessage = () => {
+    switch (rideStatus) {
+      case 'requested':
+        return 'Looking for a driver...';
+      case 'active':
+        return 'Driver is on the way!';
+      case 'completed':
+        return 'Ride completed!';
+      case 'cancelled':
+        return 'Ride cancelled';
+      default:
+        return 'Processing your request...';
+    }
+  };
+
+  const getStatusColor = (): [ColorValue, ColorValue, ...ColorValue[]] => {
+    switch (rideStatus) {
+      case 'requested':
+        return ['#3b82f6', '#1d4ed8'];
+      case 'active':
+        return ['#10b981', '#059669'];
+      case 'completed':
+        return ['#8b5cf6', '#7c3aed'];
+      case 'cancelled':
+        return ['#ef4444', '#dc2626'];
+      default:
+        return ['#6b7280', '#4b5563'];
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, isDarkMode && styles.darkContainer]}>
+        <ActivityIndicator size="large" color="#3b82f6" />
+        <Text style={[styles.loadingText, isDarkMode && styles.darkText]}>
+          Finding your driver...
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <LinearGradient
+      colors={getStatusColor()}
+      style={[styles.container, isDarkMode && styles.darkContainer]}
+    >
+      <View style={styles.content}>
+        <Text style={styles.statusTitle}>{getStatusMessage()}</Text>
+        
+        {driverInfo && (
+          <View style={styles.driverCard}>
+            <Text style={styles.driverTitle}>Your Driver</Text>
+            <Text style={styles.driverName}>🚗 {driverInfo.name}</Text>
+            <Text style={styles.driverPhone}>📞 {driverInfo.phone}</Text>
+            
+            {driverInfo.vehicle && Object.keys(driverInfo.vehicle).length > 0 && (
+              <View style={styles.vehicleInfo}>
+                <Text style={styles.vehicleTitle}>Vehicle Details:</Text>
+                <Text style={styles.vehicleText}>
+                  {driverInfo.vehicle.make} {driverInfo.vehicle.model} ({driverInfo.vehicle.color})
+                </Text>
+                <Text style={styles.vehicleText}>
+                  License: {driverInfo.vehicle.licensePlate}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {driverLocation && (
+          <View style={styles.locationCard}>
+            <Text style={styles.locationTitle}>Driver Location</Text>
+            <Text style={styles.locationText}>
+              📍 Lat: {driverLocation.latitude.toFixed(6)}
+            </Text>
+            <Text style={styles.locationText}>
+              📍 Lng: {driverLocation.longitude.toFixed(6)}
+            </Text>
+            {estimatedArrival && (
+              <Text style={styles.etaText}>
+                ⏰ Estimated arrival: {estimatedArrival}
+              </Text>
+            )}
+          </View>
+        )}
+
+        <View style={styles.routeInfo}>
+          <Text style={styles.routeTitle}>Route Information</Text>
+          <Text style={styles.routeText}>
+            🚀 From: {origin.latitude.toFixed(6)}, {origin.longitude.toFixed(6)}
+          </Text>
+          <Text style={styles.routeText}>
+            🎯 To: {destination.latitude.toFixed(6)}, {destination.longitude.toFixed(6)}
+          </Text>
+        </View>
+
+        {rideStatus === 'requested' && (
+          <TouchableOpacity style={styles.cancelButton} onPress={handleCancelRide}>
+            <Text style={styles.cancelButtonText}>Cancel Ride</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      
+      {/* Rating Modal */}
+      {rideData && (
+        <RideRatingModal
+          visible={ratingModalVisible}
+          onClose={() => {
+            setRatingModalVisible(false);
+            // Navigate back after rating
+            navigation.goBack();
           }}
-        >
-          <Text style={styles.ratingButtonText}>Submit</Text>
-        </TouchableOpacity>
-      </View>
-    </Modal>
-      </View>
-    </View>
+          rideId={realtimeId}
+          rideData={{
+            from: `Location (${origin.latitude.toFixed(4)}, ${origin.longitude.toFixed(4)})`,
+            to: `Location (${destination.latitude.toFixed(4)}, ${destination.longitude.toFixed(4)})`,
+            driverName: driverInfo?.name || 'Driver',
+            driverId: rideData.driverId || 'unknown',
+            amount: '0',
+            distance: '0',
+            date: new Date().toDateString(),
+            time: new Date().toTimeString(),
+          }}
+        />
+      )}
+    </LinearGradient>
   );
 };
 
@@ -303,162 +236,123 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  map: {
-    width,
-    height: height * 0.75,
+  darkContainer: {
+    backgroundColor: '#121212',
   },
-  waitingContainer: {
-    position: 'absolute',
-    bottom: 0,
-    width: '100%',
-    padding: 25,
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 10,
-    alignItems: 'center',
-  },
-  waitingText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  card: {
-    backgroundColor: '#FFF8F0',
-    padding: 18,
-    borderRadius: 16,
-    marginTop: 20,
-    width: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#6F4E37',
-    marginBottom: 6,
-  },
-  infoText: {
-    fontSize: 15,
-    color: '#333',
-    marginVertical: 2,
-  },
-  highlight: {
-    fontWeight: 'bold',
-    color: '#FF5722',
-  },
-  ratingContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
+  content: {
+    flex: 1,
     padding: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 6,
+    justifyContent: 'center',
   },
-  
-  ratingTitle: {
-    fontSize: 18,
+  statusTitle: {
+    fontSize: 28,
     fontWeight: 'bold',
+    color: 'white',
+    textAlign: 'center',
+    marginBottom: 30,
+  },
+  driverCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+  },
+  driverTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  driverName: {
+    fontSize: 18,
+    color: '#374151',
+    marginBottom: 8,
+  },
+  driverPhone: {
+    fontSize: 16,
+    color: '#6b7280',
     marginBottom: 15,
   },
-  
-  ratingButton: {
-    marginTop: 20,
-    backgroundColor: '#007bff',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 25,
+  vehicleInfo: {
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    paddingTop: 15,
   },
-  
-  ratingButtonText: {
-    color: '#fff',
+  vehicleTitle: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  vehicleText: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+  locationCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+  },
+  locationTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 8,
+  },
+  etaText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#059669',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  routeInfo: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 30,
+  },
+  routeTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  routeText: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 8,
+  },
+  cancelButton: {
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    padding: 15,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  loadingText: {
+    fontSize: 18,
+    color: '#6b7280',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  darkText: {
+    color: '#d1d5db',
   },
 });
-
-const darkMapStyle = [
-  {
-    elementType: 'geometry',
-    stylers: [{ color: '#242f3e' }],
-  },
-  {
-    elementType: 'labels.text.stroke',
-    stylers: [{ color: '#242f3e' }],
-  },
-  {
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#746855' }],
-  },
-  {
-    featureType: 'administrative.locality',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#d59563' }],
-  },
-  {
-    featureType: 'poi',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#d59563' }],
-  },
-  {
-    featureType: 'poi.park',
-    elementType: 'geometry',
-    stylers: [{ color: '#263c3f' }],
-  },
-  {
-    featureType: 'poi.park',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#6b9a76' }],
-  },
-  {
-    featureType: 'road',
-    elementType: 'geometry',
-    stylers: [{ color: '#38414e' }],
-  },
-  {
-    featureType: 'road',
-    elementType: 'geometry.stroke',
-    stylers: [{ color: '#212a37' }],
-  },
-  {
-    featureType: 'road',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#9ca5b3' }],
-  },
-  {
-    featureType: 'transit',
-    elementType: 'geometry',
-    stylers: [{ color: '#2f3948' }],
-  },
-  {
-    featureType: 'transit.station',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#d59563' }],
-  },
-  {
-    featureType: 'water',
-    elementType: 'geometry',
-    stylers: [{ color: '#17263c' }],
-  },
-  {
-    featureType: 'water',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#515c6d' }],
-  },
-  {
-    featureType: 'water',
-    elementType: 'labels.text.stroke',
-    stylers: [{ color: '#17263c' }],
-  },
-  
-];
 
 export default RideWaiting;

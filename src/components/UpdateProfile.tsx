@@ -30,7 +30,7 @@ const UpdateProfile = () => {
 
                 const user=snapshot.docs.map(doc => ({
                     id: doc.id,
-                    ...doc.data(),
+                    ...(doc.data() || {}),
                 })).find(user => user.id === uid);
                 console.log('user', user);
                 console.log('uid', uid);
